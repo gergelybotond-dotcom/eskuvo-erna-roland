@@ -192,118 +192,96 @@ async function getGoogleAccessToken(serviceAccountKey) {
 }
 
 /**
- * Fájl feltöltése Google Drive-ra
+ * Fájl feltöltése Cloudflare R2-re
  */
-async function uploadToGoogleDrive(file, fileName, accessToken, folderId) {
-  if (!file || !fileName || !accessToken || !folderId) {
-    throw new Error('Missing required parameters for upload');
+async function uploadToR2(file, fileName, r2Bucket) {
+  if (!file || !fileName || !r2Bucket) {
+    throw new Error('Missing required parameters for R2 upload');
   }
 
-  // Multipart form-data assembly
-  const metadata = {
-    name: fileName,
-    parents: [folderId]
-  };
+  try {
+    // Fájl buffer-be olvasása
+    const buffer = await file.arrayBuffer();
+    
+    console.log(`Uploading to R2: ${fileName} (${buffer.byteLength} bytes)`);
 
-  // FormData konstruálása
-  const formData = new FormData();
-  formData.append(
-    'metadata',
-    new Blob([JSON.stringify(metadata)], { type: 'application/json' })
-  );
-  formData.append('file', file, fileName);
-
-  // Google Drive API upload
-  const uploadResponse = await fetch(
-    'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`
+    // R2-re feltöltés
+    await r2Bucket.put(fileName, buffer, {
+      httpMetadata: {
+        contentType: file.type,
       },
-      body: formData
-    }
-  );
+      customMetadata: {
+        uploadedAt: new Date().toISOString(),
+      }
+    });
 
-  if (!uploadResponse.ok) {
-    const errorText = await uploadResponse.text();
-    throw new Error(`Google Drive upload failed: ${uploadResponse.status} - ${errorText}`);
+    console.log(`✓ File uploaded to R2: ${fileName}`);
+    return { id: fileName, name: fileName };
+
+  } catch (error) {
+    console.error(`✗ R2 upload failed: ${error.message}`);
+    throw error;
   }
-
-  const uploadedFile = await uploadResponse.json();
-  
-  if (!uploadedFile.id) {
-    throw new Error('Upload successful but no file ID returned');
-  }
-
-  return uploadedFile;
 }
 
 /**
- * Fájlok listázása a Google Drive mappáról
+ * Fájlok listázása az R2-ből
  */
-async function listGoogleDriveFiles(accessToken, folderId) {
-  if (!accessToken || !folderId) {
-    throw new Error('Missing access token or folder ID');
+async function listR2Files(r2Bucket) {
+  if (!r2Bucket) {
+    throw new Error('R2 bucket not available');
   }
 
-  // Query összeállítása - csak nem törölt fájlok a mappában
-  const query = `'${folderId}' in parents and trashed=false`;
-  const fieldsToFetch = 'id,name,mimeType,thumbnailLink,webContentLink';
-  
-  const listUrl = new URL('https://www.googleapis.com/drive/v3/files');
-  listUrl.searchParams.append('q', query);
-  listUrl.searchParams.append('fields', `files(${fieldsToFetch})`);
-  listUrl.searchParams.append('pageSize', '1000');
+  try {
+    console.log(`Listing files from R2...`);
 
-  console.log(`Listing files from folder: ${folderId}`);
+    // R2-ből listázás
+    const result = await r2Bucket.list();
+    
+    // Objektumok JSON-ra konvertálása
+    const files = result.objects.map(obj => ({
+      id: obj.key,
+      name: obj.key,
+      size: obj.size,
+      uploadedAt: obj.uploaded,
+      contentType: obj.httpMetadata?.contentType || 'unknown'
+    }));
 
-  const listResponse = await fetch(listUrl.toString(), {
-    method: 'GET',
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'Accept': 'application/json'
-    }
-  });
+    console.log(`Found ${files.length} files in R2`);
+    return files;
 
-  if (!listResponse.ok) {
-    const errorText = await listResponse.text();
-    throw new Error(`List failed (${listResponse.status}): ${errorText}`);
+  } catch (error) {
+    console.error(`✗ R2 list failed: ${error.message}`);
+    throw error;
   }
-
-  const data = await listResponse.json();
-  
-  if (!data.files) {
-    console.warn('No files field in response');
-    return [];
-  }
-
-  console.log(`Found ${data.files.length} files`);
-  return data.files;
 }
 
 /**
- * Fájl törlése a Google Drive-ról
+ * Fájl törlése az R2-ből
  */
-async function deleteFromGoogleDrive(fileId, accessToken) {
-  const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}`, {
-    method: 'DELETE',
-    headers: {
-      'Authorization': `Bearer ${accessToken}`
-    }
-  });
-
-  if (!response.ok) {
-    throw new Error(`Delete failed: ${response.statusText}`);
+async function deleteFromR2(fileName, r2Bucket) {
+  if (!fileName || !r2Bucket) {
+    throw new Error('Missing file name or R2 bucket');
   }
 
-  return true;
+  try {
+    console.log(`Deleting from R2: ${fileName}`);
+
+    await r2Bucket.delete(fileName);
+
+    console.log(`✓ File deleted from R2: ${fileName}`);
+    return true;
+
+  } catch (error) {
+    console.error(`✗ R2 delete failed: ${error.message}`);
+    throw error;
+  }
 }
 
 /**
- * POST /upload - Fájl feltöltése
+ * POST /upload - Fájl feltöltése R2-re
  */
-async function handleUpload(request, serviceAccountKey, folderId) {
+async function handleUpload(request, r2Bucket) {
   try {
     // FormData feldolgozása
     let formData;
@@ -350,26 +328,8 @@ async function handleUpload(request, serviceAccountKey, folderId) {
 
     console.log(`Uploading file: ${file.name} (${file.type}, ${file.size} bytes)`);
 
-    // Google Access Token szerzése
-    let accessToken;
-    try {
-      accessToken = await getGoogleAccessToken(serviceAccountKey);
-    } catch (error) {
-      console.error('Token generation error:', error);
-      return new Response(
-        JSON.stringify({ 
-          error: 'Failed to authenticate with Google',
-          details: error.message
-        }),
-        {
-          status: 500,
-          headers: getCorsHeaders()
-        }
-      );
-    }
-
-    // Feltöltés Google Drive-ra
-    const result = await uploadToGoogleDrive(file, file.name, accessToken, folderId);
+    // R2-re feltöltés
+    const result = await uploadToR2(file, file.name, r2Bucket);
 
     console.log(`File uploaded successfully: ${result.id}`);
 
@@ -400,12 +360,11 @@ async function handleUpload(request, serviceAccountKey, folderId) {
 }
 
 /**
- * GET /files - Fájlok listázása
+ * GET /files - Fájlok listázása az R2-ből
  */
-async function handleListFiles(serviceAccountKey, folderId) {
+async function handleListFiles(r2Bucket) {
   try {
-    const accessToken = await getGoogleAccessToken(serviceAccountKey);
-    const files = await listGoogleDriveFiles(accessToken, folderId);
+    const files = await listR2Files(r2Bucket);
 
     return new Response(JSON.stringify(files), {
       status: 200,
@@ -421,9 +380,9 @@ async function handleListFiles(serviceAccountKey, folderId) {
 }
 
 /**
- * DELETE /file/:id - Fájl törlése
+ * DELETE /file/:id - Fájl törlése az R2-ből
  */
-async function handleDeleteFile(request, fileId, serviceAccountKey, adminToken) {
+async function handleDeleteFile(request, fileId, r2Bucket, adminToken) {
   // Admin autentikáció
   const authHeader = request.headers.get('Authorization');
   
@@ -443,8 +402,7 @@ async function handleDeleteFile(request, fileId, serviceAccountKey, adminToken) 
   }
 
   try {
-    const accessToken = await getGoogleAccessToken(serviceAccountKey);
-    await deleteFromGoogleDrive(fileId, accessToken);
+    await deleteFromR2(fileId, r2Bucket);
 
     return new Response(JSON.stringify({ success: true }), {
       status: 200,
@@ -460,7 +418,7 @@ async function handleDeleteFile(request, fileId, serviceAccountKey, adminToken) 
 }
 
 /**
- * Main Handler
+ * Main Handler - R2 Storage
  */
 export default {
   async fetch(request, env, ctx) {
@@ -474,57 +432,16 @@ export default {
     const pathname = url.pathname;
 
     console.log(`${request.method} ${pathname}`);
-    
-    // Debug: Environment variables teljes listája
-    const allEnvKeys = Object.keys(env);
-    console.log(`Available env keys: ${allEnvKeys.join(', ')}`);
+    console.log(`Available bindings: ${Object.keys(env).join(', ')}`);
 
-    // Service Account kulcs betöltése az environment-ből
-    let serviceAccountKey;
-    try {
-      // Közvetlenül az env-ből olvassuk a CF_SERVICE_KEY secret-et
-      const serviceKeyStr = env.CF_SERVICE_KEY;
-      
-      console.log(`✓ Attempting to read CF_SERVICE_KEY`);
-      console.log(`  - Exists: ${serviceKeyStr !== undefined && serviceKeyStr !== null}`);
-      console.log(`  - Is string: ${typeof serviceKeyStr === 'string'}`);
-      console.log(`  - Length: ${serviceKeyStr ? serviceKeyStr.length : 0}`);
-      
-      if (!serviceKeyStr) {
-        console.error('✗ CF_SERVICE_KEY is missing or empty');
-        console.error(`  - Available keys: ${allEnvKeys.join(', ')}`);
-        return new Response(
-          JSON.stringify({ 
-            error: 'Server configuration error',
-            details: 'CF_SERVICE_KEY secret not found',
-            availableKeys: allEnvKeys,
-            tip: 'Ensure CF_SERVICE_KEY is set in Cloudflare Dashboard'
-          }),
-          {
-            status: 500,
-            headers: getCorsHeaders()
-          }
-        );
-      }
-
-      // JSON parse - a secret-ből közvetlenül JSON string jön
-      try {
-        serviceAccountKey = JSON.parse(serviceKeyStr);
-        console.log(`✓ CF_SERVICE_KEY parsed successfully`);
-        console.log(`  - Client email: ${serviceAccountKey.client_email}`);
-      } catch (parseError) {
-        console.error(`✗ Failed to parse CF_SERVICE_KEY as JSON`);
-        console.error(`  - Error: ${parseError.message}`);
-        console.error(`  - First 100 chars: ${serviceKeyStr.substring(0, 100)}...`);
-        throw new Error(`Invalid JSON in CF_SERVICE_KEY: ${parseError.message}`);
-      }
-
-    } catch (error) {
-      console.error('✗ Service key initialization failed:', error.message);
+    // R2 Bucket ellenőrzése
+    const r2Bucket = env.R2_BUCKET;
+    if (!r2Bucket) {
+      console.error('✗ R2_BUCKET binding not found');
       return new Response(
         JSON.stringify({ 
           error: 'Server configuration error',
-          details: error.message
+          details: 'R2_BUCKET binding not configured'
         }),
         {
           status: 500,
@@ -533,29 +450,27 @@ export default {
       );
     }
 
-    // Environment variables értékei
-    const folderId = env.DRIVE_FOLDER_ID || 'root';
+    console.log(`✓ R2 bucket available`);
+
+    // Admin token
     const adminToken = env.ADMIN_TOKEN;
+    console.log(`✓ Admin token configured: ${!!adminToken}`);
 
-    console.log(`✓ Configuration loaded`);
-    console.log(`  - Folder: ${folderId}`);
-    console.log(`  - Admin token exists: ${!!adminToken}`);
-
-    // POST /upload - Fájl feltöltése
+    // POST /upload - R2-re feltöltés
     if (request.method === 'POST' && pathname === '/upload') {
-      return handleUpload(request, serviceAccountKey, folderId);
+      return handleUpload(request, r2Bucket);
     }
 
-    // GET /files - Fájlok listázása
+    // GET /files - R2-ből listázás
     if (request.method === 'GET' && pathname === '/files') {
-      return handleListFiles(serviceAccountKey, folderId);
+      return handleListFiles(r2Bucket);
     }
 
-    // DELETE /file/:id - Fájl törlése
+    // DELETE /file/:id - R2-ből törlés
     const deleteMatch = pathname.match(/^\/file\/(.+)$/);
     if (request.method === 'DELETE' && deleteMatch) {
       const fileId = decodeURIComponent(deleteMatch[1]);
-      return handleDeleteFile(request, fileId, serviceAccountKey, adminToken);
+      return handleDeleteFile(request, fileId, r2Bucket, adminToken);
     }
 
     // 404 - Ismeretlen végpont

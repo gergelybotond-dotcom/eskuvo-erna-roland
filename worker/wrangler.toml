@@ -5,10 +5,16 @@ compatibility_date = "2024-01-01"
 # Development environment
 [env.development]
 vars = { DRIVE_FOLDER_ID = "root" }
+r2_buckets = [
+  { binding = "R2_BUCKET", bucket_name = "eskuvo-upload", preview_bucket_name = "eskuvo-upload" }
+]
 
 # Production environment
 [env.production]
 vars = { DRIVE_FOLDER_ID = "1CcpN3MUtGl6OS49gH7_9mE4nHn4vX1ea" }
+r2_buckets = [
+  { binding = "R2_BUCKET", bucket_name = "eskuvo-upload" }
+]
 
 # Development
 [dev]
