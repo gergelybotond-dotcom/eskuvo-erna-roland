@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Galéria - Erna & Roland</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600;700&family=Montserrat:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="page-container">
+        <!-- Vissza navigáció -->
+        <a href="index.html" class="back-link">← Vissza</a>
+        
+        <div class="content">
+            <h1>Fotógaléria</h1>
+            
+            <!-- Loading spinner -->
+            <div id="loadingSpinner" class="loading-spinner">
+                <div class="spinner"></div>
+                <p>Betöltés...</p>
+            </div>
+            
+            <!-- Galéria grid -->
+            <div id="gallery" class="gallery-grid">
+                <!-- A fájlok JavaScript-ből kerülnek be -->
+            </div>
+            
+            <!-- Üres galéria üzenet -->
+            <div id="emptyMessage" class="empty-message" style="display: none;">
+                <p>Még nincsenek feltöltött fotók</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Lightbox modal -->
+    <div id="lightbox" class="lightbox" style="display: none;">
+        <div class="lightbox-content">
+            <span class="lightbox-close">&times;</span>
+            <img id="lightboxImage" src="" alt="">
+            <video id="lightboxVideo" style="display: none;" controls></video>
+        </div>
+    </div>
+
+    <script src="config.js"></script>
+    <script>
+        const gallery = document.getElementById('gallery');
+        const loadingSpinner = document.getElementById('loadingSpinner');
+        const emptyMessage = document.getElementById('emptyMessage');
+        const lightbox = document.getElementById('lightbox');
+        const lightboxImage = document.getElementById('lightboxImage');
+        const lightboxVideo = document.getElementById('lightboxVideo');
+        const lightboxClose = document.querySelector('.lightbox-close');
+
+        // Galéria betöltése
+        async function loadGallery() {
+            try {
+                const response = await fetch(`${CONFIG.WORKER_URL}/files`);
+                const files = await response.json();
+                
+                loadingSpinner.style.display = 'none';
+                
+                if (files.length === 0) {
+                    emptyMessage.style.display = 'block';
+                    return;
+                }
+                
+                // Fájlok megjelenítése
+                files.forEach(file => {
+                    const item = createGalleryItem(file);
+                    gallery.appendChild(item);
+                });
+            } catch (error) {
+                console.error('Failed to load gallery:', error);
+                loadingSpinner.style.display = 'none';
+                emptyMessage.style.display = 'block';
+            }
+        }
+
+        // Galéria elem létrehozása
+        function createGalleryItem(file) {
+            const item = document.createElement('div');
+            item.className = 'gallery-item';
+            
+            // Meghatározza a fájl típusát
+            const isVideo = file.mimeType === 'video/mp4';
+            
+            if (isVideo) {
+                // Videó
+                const video = document.createElement('video');
+                video.src = file.webContentLink;
+                video.style.width = '100%';
+                video.style.height = '100%';
+                video.style.objectFit = 'cover';
+                video.controls = false;
+                
+                item.appendChild(video);
+                item.addEventListener('click', () => openLightbox(file, true));
+            } else {
+                // Kép
+                const img = document.createElement('img');
+                img.src = file.thumbnailLink || file.webContentLink;
+                img.alt = file.name;
+                img.style.width = '100%';
+                img.style.height = '100%';
+                img.style.objectFit = 'cover';
+                
+                item.appendChild(img);
+                item.addEventListener('click', () => openLightbox(file, false));
+            }
+            
+            return item;
+        }
+
+        // Lightbox megnyitása
+        function openLightbox(file, isVideo) {
+            lightbox.style.display = 'flex';
+            
+            if (isVideo) {
+                lightboxImage.style.display = 'none';
+                lightboxVideo.style.display = 'block';
+                lightboxVideo.src = file.webContentLink;
+            } else {
+                lightboxVideo.style.display = 'none';
+                lightboxImage.style.display = 'block';
+                lightboxImage.src = file.webContentLink;
+            }
+        }
+
+        // Lightbox bezárása
+        lightboxClose.addEventListener('click', () => {
+            lightbox.style.display = 'none';
+            lightboxVideo.src = '';
+            lightboxImage.src = '';
+        });
+
+        lightbox.addEventListener('click', (e) => {
+            if (e.target === lightbox) {
+                lightbox.style.display = 'none';
+                lightboxVideo.src = '';
+                lightboxImage.src = '';
+            }
+        });
+
+        // Galéria betöltésének indítása
+        loadGallery();
+    </script>
+</body>
+</html>

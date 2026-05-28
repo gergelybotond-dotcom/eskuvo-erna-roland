@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel - Erna & Roland</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600;700&family=Montserrat:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="page-container">
+        <!-- Vissza navigáció -->
+        <a href="index.html" class="back-link">← Vissza</a>
+        
+        <div class="content">
+            <!-- Login panel -->
+            <div id="loginPanel" class="auth-panel">
+                <h1>Admin Bejelentkezés</h1>
+                <div class="form-group">
+                    <input type="password" id="passwordInput" placeholder="Adja meg a jelszót" class="form-input">
+                    <button id="loginBtn" class="button button-primary">Bejelentkezés</button>
+                </div>
+                <div id="loginError" class="message message-error" style="display: none;">
+                    Hibás jelszó
+                </div>
+            </div>
+            
+            <!-- Admin panel -->
+            <div id="adminPanel" style="display: none;">
+                <h1>Feltöltött Fájlok</h1>
+                <p class="admin-info">Admin panel - csak a jelszóval elérhető</p>
+                
+                <!-- Loading spinner -->
+                <div id="loadingSpinner" class="loading-spinner">
+                    <div class="spinner"></div>
+                    <p>Betöltés...</p>
+                </div>
+                
+                <!-- Fájlok listája -->
+                <div id="filesList" class="files-list">
+                    <!-- A fájlok JavaScript-ből kerülnek be -->
+                </div>
+                
+                <!-- Üres lista üzenet -->
+                <div id="emptyMessage" class="empty-message" style="display: none;">
+                    <p>Nincsenek feltöltött fájlok</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="config.js"></script>
+    <script>
+        const loginPanel = document.getElementById('loginPanel');
+        const adminPanel = document.getElementById('adminPanel');
+        const passwordInput = document.getElementById('passwordInput');
+        const loginBtn = document.getElementById('loginBtn');
+        const loginError = document.getElementById('loginError');
+        const filesList = document.getElementById('filesList');
+        const loadingSpinner = document.getElementById('loadingSpinner');
+        const emptyMessage = document.getElementById('emptyMessage');
+
+        // Login kezelés
+        loginBtn.addEventListener('click', async () => {
+            const password = passwordInput.value;
+            
+            // SHA-256 hash létrehozása
+            const hash = await sha256(password);
+            
+            if (hash === CONFIG.ADMIN_PASSWORD_HASH) {
+                // Sikeres login
+                loginPanel.style.display = 'none';
+                adminPanel.style.display = 'block';
+                loadFiles();
+            } else {
+                loginError.style.display = 'block';
+                passwordInput.value = '';
+            }
+        });
+
+        // Enter gomb kezelés
+        passwordInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                loginBtn.click();
+            }
+        });
+
+        // SHA-256 hash függvény
+        async function sha256(message) {
+            const msgBuffer = new TextEncoder().encode(message);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+            return hashHex;
+        }
+
+        // Fájlok betöltése
+        async function loadFiles() {
+            try {
+                const response = await fetch(`${CONFIG.WORKER_URL}/files`);
+                const files = await response.json();
+                
+                loadingSpinner.style.display = 'none';
+                
+                if (files.length === 0) {
+                    emptyMessage.style.display = 'block';
+                    return;
+                }
+                
+                // Fájlok megjelenítése
+                files.forEach(file => {
+                    const item = createFileItem(file);
+                    filesList.appendChild(item);
+                });
+            } catch (error) {
+                console.error('Failed to load files:', error);
+                loadingSpinner.style.display = 'none';
+                emptyMessage.style.display = 'block';
+            }
+        }
+
+        // Fájl elem létrehozása
+        function createFileItem(file) {
+            const item = document.createElement('div');
+            item.className = 'file-item';
+            
+            const isImage = file.mimeType.startsWith('image/');
+            
+            // Előnézet
+            const preview = document.createElement('img');
+            preview.src = file.thumbnailLink || file.webContentLink;
+            preview.alt = file.name;
+            preview.className = 'file-preview';
+            
+            // Fájl info
+            const info = document.createElement('div');
+            info.className = 'file-info';
+            
+            const nameEl = document.createElement('p');
+            nameEl.className = 'file-name';
+            nameEl.textContent = file.name;
+            info.appendChild(nameEl);
+            
+            // Gombok
+            const buttonsContainer = document.createElement('div');
+            buttonsContainer.className = 'file-actions';
+            
+            // Letöltés gomb
+            const downloadBtn = document.createElement('a');
+            downloadBtn.href = file.webContentLink;
+            downloadBtn.className = 'button button-small';
+            downloadBtn.textContent = '⬇️ Letöltés';
+            downloadBtn.download = file.name;
+            buttonsContainer.appendChild(downloadBtn);
+            
+            // Törlés gomb
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'button button-small button-danger';
+            deleteBtn.textContent = '🗑️ Törlés';
+            deleteBtn.addEventListener('click', () => deleteFile(file.id, item));
+            buttonsContainer.appendChild(deleteBtn);
+            
+            info.appendChild(buttonsContainer);
+            
+            item.appendChild(preview);
+            item.appendChild(info);
+            
+            return item;
+        }
+
+        // Fájl törlése
+        async function deleteFile(fileId, element) {
+            if (!confirm('Biztos, hogy törlöd ezt a fájlt?')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${CONFIG.WORKER_URL}/file/${fileId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${CONFIG.ADMIN_PASSWORD_HASH}`
+                    }
+                });
+                
+                if (response.ok) {
+                    element.remove();
+                } else {
+                    alert('Hiba a fájl törlése során');
+                }
+            } catch (error) {
+                console.error('Delete error:', error);
+                alert('Hiba a fájl törlése során');
+            }
+        }
+    </script>
+</body>
+</html>

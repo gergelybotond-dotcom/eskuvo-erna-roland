@@ -1,0 +1,33 @@
+name = "eskuvo-upload"
+main = "index.js"
+compatibility_date = "2024-01-01"
+type = "javascript"
+
+# Environment variables
+[env.production]
+routes = [
+  { pattern = "eskuvo-upload.gergely-botond.workers.dev/*", zone_id = "YOUR_ZONE_ID" }
+]
+[vars]
+DRIVE_FOLDER_ID = "1CcpN3MUtGl6OS49gH7_9mE4nHn4vX1ea"
+ADMIN_TOKEN = "YOUR_SHA256_ADMIN_PASSWORD_HASH"
+
+# Service Account JSON kulcs binding
+# Az CF_SERVICE_KEY environment variable-t a Cloudflare Dashboard-ban kell beállítani
+# Workers & Pages → eskuvo-upload → Settings → Environment variables
+# Add variable: CF_SERVICE_KEY = { "type": "secret", "value": "... a Service Account JSON teljes tartalma ..." }
+
+# Build beállítások
+[build]
+cwd = "."
+command = "npm install"
+watch_paths = ["*.js"]
+
+# Development
+[dev]
+port = 8787
+
+# KV namespace binding (opcionális)
+# [[kv_namespaces]]
+# binding = "CACHE"
+# id = "YOUR_KV_ID"

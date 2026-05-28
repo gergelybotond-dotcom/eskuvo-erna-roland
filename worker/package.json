@@ -1,0 +1,23 @@
+{
+  "name": "eskuvo-upload-worker",
+  "version": "1.0.0",
+  "description": "Cloudflare Worker az esküvői website fájlfeltöltéséhez",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler publish",
+    "deploy:prod": "wrangler publish --env production"
+  },
+  "devDependencies": {
+    "wrangler": "^3.0.0"
+  },
+  "keywords": [
+    "cloudflare",
+    "worker",
+    "google-drive",
+    "wedding"
+  ],
+  "author": "Erna & Roland",
+  "license": "ISC"
+}

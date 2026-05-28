@@ -1,0 +1,23 @@
+{
+  "name": "wedding-website",
+  "version": "1.0.0",
+  "description": "Erna & Roland esküvői website - GitHub Pages & Cloudflare Worker",
+  "scripts": {
+    "serve": "python -m http.server 8000",
+    "serve-node": "npx http-server",
+    "worker:dev": "cd worker && wrangler dev",
+    "worker:deploy": "cd worker && wrangler publish",
+    "worker:deploy:prod": "cd worker && wrangler publish --env production"
+  },
+  "keywords": [
+    "wedding",
+    "github-pages",
+    "cloudflare-worker",
+    "google-drive"
+  ],
+  "author": "Erna & Roland",
+  "license": "ISC",
+  "devDependencies": {
+    "wrangler": "^3.0.0"
+  }
+}

@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fájl Feltöltés - Erna & Roland</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600;700&family=Montserrat:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="page-container">
+        <!-- Vissza navigáció -->
+        <a href="index.html" class="back-link">← Vissza</a>
+        
+        <div class="content">
+            <h1>Fotó/Videó Feltöltés</h1>
+            
+            <!-- Drag & Drop zóna -->
+            <div class="upload-zone" id="uploadZone">
+                <p class="upload-icon">📤</p>
+                <p class="upload-text">Húzd ide a fájlokat vagy kattints a kiválasztáshoz</p>
+                <p class="upload-info">Támogatott: JPG, PNG, MP4</p>
+                <input type="file" id="fileInput" multiple accept=".jpg,.jpeg,.png,.mp4" style="display: none;">
+            </div>
+            
+            <!-- Feltöltési progress bar -->
+            <div id="progressContainer" class="progress-container" style="display: none;">
+                <p class="progress-label">Feltöltés: <span id="progressPercent">0</span>%</p>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+            </div>
+            
+            <!-- Sikeres feltöltés üzenet -->
+            <div id="successMessage" class="message message-success" style="display: none;">
+                ✓ Sikeresen feltöltve! 🎉
+            </div>
+            
+            <!-- Hiba üzenet -->
+            <div id="errorMessage" class="message message-error" style="display: none;">
+                ✗ Hiba a feltöltés során
+            </div>
+        </div>
+    </div>
+
+    <script src="config.js"></script>
+    <script>
+        // Drag & Drop kezelés
+        const uploadZone = document.getElementById('uploadZone');
+        const fileInput = document.getElementById('fileInput');
+        const progressContainer = document.getElementById('progressContainer');
+        const progressFill = document.getElementById('progressFill');
+        const progressPercent = document.getElementById('progressPercent');
+        const successMessage = document.getElementById('successMessage');
+        const errorMessage = document.getElementById('errorMessage');
+
+        // Kattintás az upload zónára
+        uploadZone.addEventListener('click', () => fileInput.click());
+
+        // Drag över effect
+        uploadZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadZone.style.borderColor = '#C9A84C';
+            uploadZone.style.backgroundColor = '#FFFBF5';
+        });
+
+        uploadZone.addEventListener('dragleave', () => {
+            uploadZone.style.borderColor = '#E0D5C7';
+            uploadZone.style.backgroundColor = '#FAFAF8';
+        });
+
+        // Drop kezelés
+        uploadZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadZone.style.borderColor = '#E0D5C7';
+            uploadZone.style.backgroundColor = '#FAFAF8';
+            
+            const files = e.dataTransfer.files;
+            handleFiles(files);
+        });
+
+        // Fájl kiválasztás kezelés
+        fileInput.addEventListener('change', (e) => {
+            handleFiles(e.target.files);
+        });
+
+        // Fájlok feltöltése
+        function handleFiles(files) {
+            successMessage.style.display = 'none';
+            errorMessage.style.display = 'none';
+            progressContainer.style.display = 'block';
+            
+            let uploadedCount = 0;
+            
+            for (let file of files) {
+                // Validáció
+                const validTypes = ['image/jpeg', 'image/png', 'video/mp4'];
+                if (!validTypes.includes(file.type)) {
+                    console.error(`Érvénytelen fájltípus: ${file.type}`);
+                    continue;
+                }
+                
+                uploadFile(file, () => {
+                    uploadedCount++;
+                    const percent = Math.round((uploadedCount / files.length) * 100);
+                    progressPercent.textContent = percent;
+                    progressFill.style.width = percent + '%';
+                    
+                    if (uploadedCount === files.length) {
+                        progressContainer.style.display = 'none';
+                        successMessage.style.display = 'block';
+                        fileInput.value = '';
+                    }
+                });
+            }
+        }
+
+        // Fájl feltöltése a Worker-hez
+        async function uploadFile(file, onComplete) {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const response = await fetch(`${CONFIG.WORKER_URL}/upload`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) throw new Error('Upload failed');
+                onComplete();
+            } catch (error) {
+                console.error('Upload error:', error);
+                progressContainer.style.display = 'none';
+                errorMessage.style.display = 'block';
+            }
+        }
+    </script>
+</body>
+</html>
