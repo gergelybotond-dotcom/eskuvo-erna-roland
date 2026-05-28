@@ -24,13 +24,22 @@ jobs:
         ADMIN_HASH=$(echo -n "$ADMIN_PASSWORD" | sha256sum | cut -d' ' -f1)
         echo "ADMIN_HASH=$ADMIN_HASH" >> $GITHUB_ENV
     
-    - name: Update config.js
+    - name: Update config.js with secrets
       env:
         DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
         ADMIN_HASH: ${{ env.ADMIN_HASH }}
       run: |
-        sed -i "s/DRIVE_FOLDER_ID_PLACEHOLDER/$DRIVE_FOLDER_ID/g" config.js
+        # Sed parancs az DRIVE_FOLDER_ID behelyettesítésére
+        # Az & karaktert &-re kell escapelni a sed helyettesítésben
+        DRIVE_FOLDER_ID_ESCAPED=$(printf '%s\n' "$DRIVE_FOLDER_ID" | sed -e 's/[\/&]/\\&/g')
+        sed -i "s/DRIVE_FOLDER_ID_PLACEHOLDER/$DRIVE_FOLDER_ID_ESCAPED/g" config.js
+        
+        # Sed parancs az ADMIN_HASH behelyettesítésére
         sed -i "s/ADMIN_HASH_PLACEHOLDER/$ADMIN_HASH/g" config.js
+        
+        # Verifikálás: megjeleníti az első pár sort
+        echo "=== config.js first lines ==="
+        head -n 5 config.js
     
     - name: Upload to GitHub Pages
       uses: actions/upload-pages-artifact@v3

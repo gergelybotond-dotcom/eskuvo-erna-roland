@@ -22,10 +22,42 @@ function handleOptions() {
 }
 
 /**
+ * Base64url encoding helper - TextEncoder + Web Crypto kompatibilis
+ */
+function base64urlEncode(data) {
+  let bytes;
+  
+  // String vagy Uint8Array input kezelése
+  if (typeof data === 'string') {
+    bytes = new TextEncoder().encode(data);
+  } else if (data instanceof Uint8Array) {
+    bytes = data;
+  } else if (data instanceof ArrayBuffer) {
+    bytes = new Uint8Array(data);
+  } else {
+    throw new Error('Invalid input type for base64urlEncode');
+  }
+  
+  // Uint8Array -> string (btoa-hoz)
+  let binaryString = '';
+  for (let i = 0; i < bytes.length; i++) {
+    binaryString += String.fromCharCode(bytes[i]);
+  }
+  
+  // Base64 encode és URL-safe karakter csere
+  return btoa(binaryString)
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, '');
+}
+
+/**
  * JWT token generálás Google Drive API-hoz
  * RS256 algoritmussal (Web Crypto API)
  */
-async function generateJWT(serviceAccountEmail, privateKey) {
+async function generateJWT(serviceAccountEmail, privateKeyBuffer) {
+  console.log(`Generating JWT for: ${serviceAccountEmail}`);
+  
   // Header
   const header = {
     alg: 'RS256',
@@ -42,37 +74,55 @@ async function generateJWT(serviceAccountEmail, privateKey) {
     iat: now
   };
 
-  // JWT encoding
-  const headerEncoded = btoa(JSON.stringify(header)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-  const payloadEncoded = btoa(JSON.stringify(payload)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+  // JWT encoding TextEncoder-rel (Unicode-biztos)
+  const headerEncoded = base64urlEncode(JSON.stringify(header));
+  const payloadEncoded = base64urlEncode(JSON.stringify(payload));
   const signatureInput = `${headerEncoded}.${payloadEncoded}`;
 
-  // Privát kulcs importálása
-  const key = await crypto.subtle.importKey(
-    'pkcs8',
-    privateKey,
-    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
-    false,
-    ['sign']
-  );
+  console.log(`JWT parts ready, signing...`);
+
+  // Privát kulcs importálása - Web Crypto API
+  let key;
+  try {
+    key = await crypto.subtle.importKey(
+      'pkcs8',
+      privateKeyBuffer instanceof ArrayBuffer ? privateKeyBuffer : privateKeyBuffer.buffer,
+      { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+      false,
+      ['sign']
+    );
+    console.log(`✓ Private key imported`);
+  } catch (error) {
+    console.error(`✗ Failed to import private key: ${error.message}`);
+    throw error;
+  }
 
   // Aláírás létrehozása
-  const signature = await crypto.subtle.sign(
-    'RSASSA-PKCS1-v1_5',
-    key,
-    new TextEncoder().encode(signatureInput)
-  );
+  let signature;
+  try {
+    signature = await crypto.subtle.sign(
+      'RSASSA-PKCS1-v1_5',
+      key,
+      new TextEncoder().encode(signatureInput)
+    );
+    console.log(`✓ Signature created (${signature.byteLength} bytes)`);
+  } catch (error) {
+    console.error(`✗ Failed to sign: ${error.message}`);
+    throw error;
+  }
 
-  const signatureEncoded = btoa(String.fromCharCode(...new Uint8Array(signature)))
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=/g, '');
+  // Aláírás base64url encoding
+  const signatureEncoded = base64urlEncode(new Uint8Array(signature));
 
-  return `${signatureInput}.${signatureEncoded}`;
+  const jwt = `${signatureInput}.${signatureEncoded}`;
+  console.log(`✓ JWT generated successfully`);
+  
+  return jwt;
 }
 
 /**
  * Google OAuth token lekérése
+ * PKCS8 ArrayBuffer importálás Web Crypto API-val
  */
 async function getGoogleAccessToken(serviceAccountKey) {
   if (!serviceAccountKey || !serviceAccountKey.private_key) {
@@ -80,46 +130,65 @@ async function getGoogleAccessToken(serviceAccountKey) {
   }
 
   const privateKeyPEM = serviceAccountKey.private_key;
-  
-  // Privát kulcs átalakítása - a JSON-ban \n van, azokat valódi newline-re kell cserélni
-  const privateKeyProcessed = privateKeyPEM
-    .replace(/\\n/g, '\n')
-    .replace(/-----BEGIN PRIVATE KEY-----\n/, '')
-    .replace(/\n-----END PRIVATE KEY-----/, '')
-    .trim();
+  console.log(`Processing private key for: ${serviceAccountKey.client_email}`);
 
-  // Base64 string dekódolása Uint8Array-vá
-  const binaryString = atob(privateKeyProcessed);
-  const bytes = new Uint8Array(binaryString.length);
-  for (let i = 0; i < binaryString.length; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
+  try {
+    // 1. PEM header/footer eltávolítása és newline normalizálása
+    let privateKeyProcessed = privateKeyPEM
+      .replace(/\\n/g, '\n')  // JSON-ban \n van, valódi newline kell
+      .split('\n')
+      .filter(line => line && !line.includes('PRIVATE KEY'))  // Header/footer törlése
+      .join('');
+    
+    console.log(`✓ PEM cleaned (${privateKeyProcessed.length} chars)`);
+
+    // 2. Base64 decode
+    const binaryString = atob(privateKeyProcessed);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    
+    console.log(`✓ Base64 decoded (${bytes.byteLength} bytes)`);
+
+    // 3. PKCS8 ArrayBuffer - ezt adjuk a generateJWT-nek
+    const privateKeyBuffer = bytes.buffer;
+    
+    // JWT token generálása
+    const jwt = await generateJWT(serviceAccountKey.client_email, privateKeyBuffer);
+
+    // Google OAuth token kérése
+    console.log(`Requesting Google access token...`);
+    const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+        assertion: jwt
+      })
+    });
+
+    if (!tokenResponse.ok) {
+      const errorData = await tokenResponse.text();
+      console.error(`✗ Google token request failed: ${tokenResponse.status}`);
+      console.error(`  Response: ${errorData.substring(0, 200)}`);
+      throw new Error(`Failed to get access token (${tokenResponse.status}): ${errorData}`);
+    }
+
+    const data = await tokenResponse.json();
+    
+    if (!data.access_token) {
+      console.error(`✗ No access token in response`);
+      throw new Error('No access token in Google response');
+    }
+
+    console.log(`✓ Access token obtained (${data.access_token.substring(0, 20)}...)`);
+    return data.access_token;
+
+  } catch (error) {
+    console.error(`✗ getGoogleAccessToken failed: ${error.message}`);
+    throw error;
   }
-
-  // JWT token generálása
-  const jwt = await generateJWT(serviceAccountKey.client_email, bytes.buffer);
-
-  // Google OAuth token kérése
-  const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-      assertion: jwt
-    })
-  });
-
-  if (!tokenResponse.ok) {
-    const errorData = await tokenResponse.text();
-    throw new Error(`Failed to get access token: ${errorData}`);
-  }
-
-  const data = await tokenResponse.json();
-  
-  if (!data.access_token) {
-    throw new Error('No access token in response');
-  }
-
-  return data.access_token;
 }
 
 /**
