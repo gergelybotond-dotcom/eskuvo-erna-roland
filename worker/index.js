@@ -405,18 +405,23 @@ export default {
     const pathname = url.pathname;
 
     console.log(`${request.method} ${pathname}`);
+    console.log(`Environment keys: ${Object.keys(env).join(', ')}`);
 
     // Service Account kulcs betöltése az environment-ből
     let serviceAccountKey;
     try {
       const serviceKeyStr = env.CF_SERVICE_KEY;
       
+      console.log(`CF_SERVICE_KEY exists: ${!!serviceKeyStr}`);
+      console.log(`CF_SERVICE_KEY type: ${typeof serviceKeyStr}`);
+      
       if (!serviceKeyStr) {
         console.error('CF_SERVICE_KEY environment variable not set');
         return new Response(
           JSON.stringify({ 
             error: 'Server configuration error',
-            details: 'Service key not configured'
+            details: 'Service key not configured - CF_SERVICE_KEY is missing',
+            availableEnv: Object.keys(env)
           }),
           {
             status: 500,
@@ -430,12 +435,16 @@ export default {
         ? JSON.parse(serviceKeyStr) 
         : serviceKeyStr;
 
+      console.log(`Service key parsed successfully`);
+      console.log(`Service account email: ${serviceAccountKey.client_email}`);
+
     } catch (error) {
-      console.error('Failed to parse service key:', error);
+      console.error('Failed to parse service key:', error.message);
+      console.error('Error stack:', error.stack);
       return new Response(
         JSON.stringify({ 
           error: 'Server configuration error',
-          details: 'Invalid service key format'
+          details: `Invalid service key format: ${error.message}`
         }),
         {
           status: 500,
@@ -449,6 +458,7 @@ export default {
     const adminToken = env.ADMIN_TOKEN;
 
     console.log(`Using folder: ${folderId}`);
+    console.log(`Admin token exists: ${!!adminToken}`);
 
     // POST /upload - Fájl feltöltése
     if (request.method === 'POST' && pathname === '/upload') {

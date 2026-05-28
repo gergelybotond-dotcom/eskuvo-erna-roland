@@ -8,13 +8,7 @@ vars = { DRIVE_FOLDER_ID = "root" }
 
 # Production environment
 [env.production]
-routes = [
-  { pattern = "eskuvo-upload.gergely-botond.workers.dev/*" }
-]
-
-# Alapvető variables (mindkét environment-hez)
-[vars]
-DRIVE_FOLDER_ID = "1CcpN3MUtGl6OS49gH7_9mE4nHn4vX1ea"
+vars = { DRIVE_FOLDER_ID = "1CcpN3MUtGl6OS49gH7_9mE4nHn4vX1ea" }
 
 # Secrets - Cloudflare Dashboard-ban kell beállítani:
 # Workers & Pages → eskuvo-upload → Settings → Secrets (Environment variables)
