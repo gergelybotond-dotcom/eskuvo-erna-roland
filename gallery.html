@@ -32,7 +32,6 @@
             <span class="lightbox-close">&times;</span>
             <button id="prevBtn" class="lightbox-nav lightbox-prev">&lt;</button>
             <button id="nextBtn" class="lightbox-nav lightbox-next">&gt;</button>
-            <a id="downloadBtn" class="lightbox-download" target="_blank" download>⬇️</a>
             <img id="lightboxImage" src="" alt="">
             <video id="lightboxVideo" style="display: none;" controls playsinline></video>
         </div>
@@ -70,8 +69,8 @@
                 const response = await fetch(`${CONFIG.WORKER_URL}/files`);
                 const data = await response.json();
                 
-                // Globális allFiles feltöltése (nem lokális!)
-                allFiles = data.reverse();
+                // Globális allFiles feltöltése (worker már feltöltési sorrendben küldi)
+                allFiles = data;
 
                 loadingSpinner.style.display = 'none';
                 
@@ -127,10 +126,6 @@
             const fileType = getFileType(file.name);
             
             lightbox.style.display = 'flex';
-            
-            const downloadBtn = document.getElementById('downloadBtn');
-            downloadBtn.href = fileUrl;
-            downloadBtn.download = file.name;
             
             if (fileType === 'video') {
                 lightboxImage.style.display = 'none';
