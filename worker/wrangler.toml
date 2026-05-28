@@ -6,12 +6,9 @@ compatibility_date = "2024-01-01"
 [env.development]
 vars = { DRIVE_FOLDER_ID = "root" }
 
-# Production environment - explicit secret deklarálás
+# Production environment
 [env.production]
 vars = { DRIVE_FOLDER_ID = "1CcpN3MUtGl6OS49gH7_9mE4nHn4vX1ea" }
-
-# Cloudflare Secrets - ezek a wrangler secret put paranccsal kerülnek be
-# CF_SERVICE_KEY és ADMIN_TOKEN Cloudflare Dashboard-ban beállított secretek
 
 # Development
 [dev]
