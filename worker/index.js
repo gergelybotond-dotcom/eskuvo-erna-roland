@@ -311,13 +311,13 @@ async function handleUpload(request, r2Bucket) {
     }
 
     // Fájl típus validáció
-    const validMimeTypes = ['image/jpeg', 'image/png', 'video/mp4'];
+    const validMimeTypes = ['image/jpeg', 'image/png'];
     if (!validMimeTypes.includes(file.type)) {
       return new Response(
         JSON.stringify({ 
           error: 'Invalid file type',
           received: file.type,
-          allowed: validMimeTypes
+          allowed: ['image/jpeg', 'image/png']
         }),
         {
           status: 400,

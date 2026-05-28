@@ -39,6 +39,7 @@
             <span class="lightbox-close">&times;</span>
             <button id="prevBtn" class="lightbox-nav lightbox-prev">&lt;</button>
             <button id="nextBtn" class="lightbox-nav lightbox-next">&gt;</button>
+            <a id="downloadBtn" class="lightbox-download" target="_blank" download>⬇️</a>
             <img id="lightboxImage" src="" alt="">
             <video id="lightboxVideo" style="display: none;" controls></video>
         </div>
@@ -77,8 +78,11 @@
         async function loadGallery() {
             try {
                 const response = await fetch(`${CONFIG.WORKER_URL}/files`);
-                allFiles = await response.json();
+                let allFiles = await response.json();
                 
+                // Fordított sorrend - legújabb fájlok előre
+                allFiles = allFiles.reverse();
+
                 loadingSpinner.style.display = 'none';
                 
                 if (allFiles.length === 0) {
@@ -142,6 +146,11 @@
             
             lightbox.style.display = 'flex';
             
+            // Letöltés gomb frissítése
+            const downloadBtn = document.getElementById('downloadBtn');
+            downloadBtn.href = fileUrl;
+            downloadBtn.download = file.name;
+            
             if (fileType === 'video') {
                 lightboxImage.style.display = 'none';
                 lightboxVideo.style.display = 'block';
@@ -159,6 +168,12 @@
         function updateNavButtons() {
             prevBtn.style.display = currentIndex > 0 ? 'block' : 'none';
             nextBtn.style.display = currentIndex < allFiles.length - 1 ? 'block' : 'none';
+            
+            // Telefonon (max 768px) elrejteni a nyilakat
+            if (window.innerWidth <= 768) {
+                prevBtn.style.display = 'none';
+                nextBtn.style.display = 'none';
+            }
         }
 
         // Előző kép
