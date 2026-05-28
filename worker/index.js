@@ -405,23 +405,31 @@ export default {
     const pathname = url.pathname;
 
     console.log(`${request.method} ${pathname}`);
-    console.log(`Environment keys: ${Object.keys(env).join(', ')}`);
+    
+    // Debug: Environment variables teljes listája
+    const allEnvKeys = Object.keys(env);
+    console.log(`Available env keys: ${allEnvKeys.join(', ')}`);
 
     // Service Account kulcs betöltése az environment-ből
     let serviceAccountKey;
     try {
+      // Közvetlenül az env-ből olvassuk a CF_SERVICE_KEY secret-et
       const serviceKeyStr = env.CF_SERVICE_KEY;
       
-      console.log(`CF_SERVICE_KEY exists: ${!!serviceKeyStr}`);
-      console.log(`CF_SERVICE_KEY type: ${typeof serviceKeyStr}`);
+      console.log(`✓ Attempting to read CF_SERVICE_KEY`);
+      console.log(`  - Exists: ${serviceKeyStr !== undefined && serviceKeyStr !== null}`);
+      console.log(`  - Is string: ${typeof serviceKeyStr === 'string'}`);
+      console.log(`  - Length: ${serviceKeyStr ? serviceKeyStr.length : 0}`);
       
       if (!serviceKeyStr) {
-        console.error('CF_SERVICE_KEY environment variable not set');
+        console.error('✗ CF_SERVICE_KEY is missing or empty');
+        console.error(`  - Available keys: ${allEnvKeys.join(', ')}`);
         return new Response(
           JSON.stringify({ 
             error: 'Server configuration error',
-            details: 'Service key not configured - CF_SERVICE_KEY is missing',
-            availableEnv: Object.keys(env)
+            details: 'CF_SERVICE_KEY secret not found',
+            availableKeys: allEnvKeys,
+            tip: 'Ensure CF_SERVICE_KEY is set in Cloudflare Dashboard'
           }),
           {
             status: 500,
@@ -430,21 +438,24 @@ export default {
         );
       }
 
-      // Ha JSON string-ként van tárolva, parse-oljuk
-      serviceAccountKey = typeof serviceKeyStr === 'string' 
-        ? JSON.parse(serviceKeyStr) 
-        : serviceKeyStr;
-
-      console.log(`Service key parsed successfully`);
-      console.log(`Service account email: ${serviceAccountKey.client_email}`);
+      // JSON parse - a secret-ből közvetlenül JSON string jön
+      try {
+        serviceAccountKey = JSON.parse(serviceKeyStr);
+        console.log(`✓ CF_SERVICE_KEY parsed successfully`);
+        console.log(`  - Client email: ${serviceAccountKey.client_email}`);
+      } catch (parseError) {
+        console.error(`✗ Failed to parse CF_SERVICE_KEY as JSON`);
+        console.error(`  - Error: ${parseError.message}`);
+        console.error(`  - First 100 chars: ${serviceKeyStr.substring(0, 100)}...`);
+        throw new Error(`Invalid JSON in CF_SERVICE_KEY: ${parseError.message}`);
+      }
 
     } catch (error) {
-      console.error('Failed to parse service key:', error.message);
-      console.error('Error stack:', error.stack);
+      console.error('✗ Service key initialization failed:', error.message);
       return new Response(
         JSON.stringify({ 
           error: 'Server configuration error',
-          details: `Invalid service key format: ${error.message}`
+          details: error.message
         }),
         {
           status: 500,
@@ -457,8 +468,9 @@ export default {
     const folderId = env.DRIVE_FOLDER_ID || 'root';
     const adminToken = env.ADMIN_TOKEN;
 
-    console.log(`Using folder: ${folderId}`);
-    console.log(`Admin token exists: ${!!adminToken}`);
+    console.log(`✓ Configuration loaded`);
+    console.log(`  - Folder: ${folderId}`);
+    console.log(`  - Admin token exists: ${!!adminToken}`);
 
     // POST /upload - Fájl feltöltése
     if (request.method === 'POST' && pathname === '/upload') {

@@ -6,18 +6,12 @@ compatibility_date = "2024-01-01"
 [env.development]
 vars = { DRIVE_FOLDER_ID = "root" }
 
-# Production environment
+# Production environment - explicit secret deklarálás
 [env.production]
 vars = { DRIVE_FOLDER_ID = "1CcpN3MUtGl6OS49gH7_9mE4nHn4vX1ea" }
 
-# Secrets - Cloudflare Dashboard-ban kell beállítani:
-# Workers & Pages → eskuvo-upload → Settings → Secrets (Environment variables)
-# 1. CF_SERVICE_KEY = a teljes Google Service Account JSON
-# 2. ADMIN_TOKEN = az admin jelszó SHA-256 hash-je
-# 
-# Cloudflare CLI-vel:
-# wrangler secret put CF_SERVICE_KEY --env production
-# wrangler secret put ADMIN_TOKEN --env production
+# Cloudflare Secrets - ezek a wrangler secret put paranccsal kerülnek be
+# CF_SERVICE_KEY és ADMIN_TOKEN Cloudflare Dashboard-ban beállított secretek
 
 # Development
 [dev]
