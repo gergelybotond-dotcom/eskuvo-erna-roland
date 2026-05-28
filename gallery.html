@@ -2,38 +2,31 @@
 <html lang="hu">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Galéria - Erna & Roland</title>
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600;700&family=Montserrat:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="page-container">
-        <!-- Vissza navigáció -->
         <a href="index.html" class="back-link">← Vissza</a>
         
         <div class="content">
             <h1>Fotógaléria</h1>
             
-            <!-- Loading spinner -->
             <div id="loadingSpinner" class="loading-spinner">
                 <div class="spinner"></div>
                 <p>Betöltés...</p>
             </div>
             
-            <!-- Galéria grid -->
-            <div id="gallery" class="gallery-grid">
-                <!-- A fájlok JavaScript-ből kerülnek be -->
-            </div>
+            <div id="gallery" class="gallery-grid"></div>
             
-            <!-- Üres galéria üzenet -->
             <div id="emptyMessage" class="empty-message" style="display: none;">
                 <p>Még nincsenek feltöltött fotók</p>
             </div>
         </div>
     </div>
 
-    <!-- Lightbox modal -->
     <div id="lightbox" class="lightbox" style="display: none;">
         <div class="lightbox-content">
             <span class="lightbox-close">&times;</span>
@@ -41,7 +34,7 @@
             <button id="nextBtn" class="lightbox-nav lightbox-next">&gt;</button>
             <a id="downloadBtn" class="lightbox-download" target="_blank" download>⬇️</a>
             <img id="lightboxImage" src="" alt="">
-            <video id="lightboxVideo" style="display: none;" controls></video>
+            <video id="lightboxVideo" style="display: none;" controls playsinline></video>
         </div>
     </div>
 
@@ -58,30 +51,27 @@
         const nextBtn = document.getElementById('nextBtn');
 
         let currentIndex = 0;
-        let allFiles = [];
+        let allFiles = [];  // GLOBÁLIS - nem let-el a loadGallery-ben!
         let touchStartX = 0;
 
-        // R2 URL генератор
         function getR2Url(fileName) {
             return `${CONFIG.WORKER_URL}/download/${encodeURIComponent(fileName)}`;
         }
 
-        // Fájl típus meghatározása
         function getFileType(fileName) {
             const ext = fileName.split('.').pop().toLowerCase();
-            if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) return 'image';
+            if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic'].includes(ext)) return 'image';
             if (['mp4', 'webm', 'mov', 'avi'].includes(ext)) return 'video';
             return 'unknown';
         }
 
-        // Galéria betöltése
         async function loadGallery() {
             try {
                 const response = await fetch(`${CONFIG.WORKER_URL}/files`);
-                let allFiles = await response.json();
+                const data = await response.json();
                 
-                // Fordított sorrend - legújabb fájlok előre
-                allFiles = allFiles.reverse();
+                // Globális allFiles feltöltése (nem lokális!)
+                allFiles = data.reverse();
 
                 loadingSpinner.style.display = 'none';
                 
@@ -90,7 +80,6 @@
                     return;
                 }
                 
-                // Fájlok megjelenítése
                 allFiles.forEach((file, index) => {
                     const item = createGalleryItem(file, index);
                     gallery.appendChild(item);
@@ -102,7 +91,6 @@
             }
         }
 
-        // Galéria elem létrehozása
         function createGalleryItem(file, index) {
             const item = document.createElement('div');
             item.className = 'gallery-item';
@@ -111,34 +99,28 @@
             const fileUrl = getR2Url(file.name);
             
             if (fileType === 'video') {
-                // Videó
                 const video = document.createElement('video');
                 video.src = fileUrl;
-                video.style.width = '100%';
-                video.style.height = '100%';
-                video.style.objectFit = 'cover';
+                video.style.cssText = 'width:100%;height:100%;object-fit:cover;';
                 video.controls = false;
-                
+                video.playsInline = true;
+                video.preload = 'metadata';
                 item.appendChild(video);
-                item.addEventListener('click', () => openLightbox(index, true));
+                item.addEventListener('click', () => openLightbox(index));
             } else if (fileType === 'image') {
-                // Kép
                 const img = document.createElement('img');
                 img.src = fileUrl;
                 img.alt = file.name;
-                img.style.width = '100%';
-                img.style.height = '100%';
-                img.style.objectFit = 'cover';
-                
+                img.loading = 'lazy';
+                img.style.cssText = 'width:100%;height:100%;object-fit:cover;';
                 item.appendChild(img);
-                item.addEventListener('click', () => openLightbox(index, false));
+                item.addEventListener('click', () => openLightbox(index));
             }
             
             return item;
         }
 
-        // Lightbox megnyitása
-        function openLightbox(index, isVideo) {
+        function openLightbox(index) {
             currentIndex = index;
             const file = allFiles[index];
             const fileUrl = getR2Url(file.name);
@@ -146,7 +128,6 @@
             
             lightbox.style.display = 'flex';
             
-            // Letöltés gomb frissítése
             const downloadBtn = document.getElementById('downloadBtn');
             downloadBtn.href = fileUrl;
             downloadBtn.download = file.name;
@@ -156,6 +137,7 @@
                 lightboxVideo.style.display = 'block';
                 lightboxVideo.src = fileUrl;
             } else {
+                lightboxVideo.pause && lightboxVideo.pause();
                 lightboxVideo.style.display = 'none';
                 lightboxImage.style.display = 'block';
                 lightboxImage.src = fileUrl;
@@ -164,88 +146,54 @@
             updateNavButtons();
         }
 
-        // Előző/Következő gombokhoz képnél
         function updateNavButtons() {
-            prevBtn.style.display = currentIndex > 0 ? 'block' : 'none';
-            nextBtn.style.display = currentIndex < allFiles.length - 1 ? 'block' : 'none';
-            
-            // Telefonon (max 768px) elrejteni a nyilakat
-            if (window.innerWidth <= 768) {
-                prevBtn.style.display = 'none';
-                nextBtn.style.display = 'none';
-            }
+            const isMobile = window.innerWidth <= 768;
+            prevBtn.style.display = (!isMobile && currentIndex > 0) ? 'flex' : 'none';
+            nextBtn.style.display = (!isMobile && currentIndex < allFiles.length - 1) ? 'flex' : 'none';
         }
 
-        // Előző kép
         function showPrevious() {
-            if (currentIndex > 0) {
-                const fileType = getFileType(allFiles[currentIndex].name);
-                openLightbox(currentIndex - 1, fileType === 'video');
-            }
+            if (currentIndex > 0) openLightbox(currentIndex - 1);
         }
 
-        // Következő kép
         function showNext() {
-            if (currentIndex < allFiles.length - 1) {
-                const fileType = getFileType(allFiles[currentIndex].name);
-                openLightbox(currentIndex + 1, fileType === 'video');
-            }
+            if (currentIndex < allFiles.length - 1) openLightbox(currentIndex + 1);
         }
 
-        // Swipe kezelés
-        function handleSwipe(e) {
-            const touchEndX = e.changedTouches[0].clientX;
-            const diff = touchStartX - touchEndX;
-            
-            if (Math.abs(diff) > 50) { // Minimum 50px swipe
-                if (diff > 0) {
-                    // Balra swipe → következő kép
-                    showNext();
-                } else {
-                    // Jobbra swipe → előző kép
-                    showPrevious();
-                }
-            }
+        function closeLightbox() {
+            lightbox.style.display = 'none';
+            lightboxVideo.pause && lightboxVideo.pause();
+            lightboxVideo.src = '';
+            lightboxImage.src = '';
         }
 
-        // Keyboard kezelés
         document.addEventListener('keydown', (e) => {
             if (lightbox.style.display === 'flex') {
                 if (e.key === 'ArrowLeft') showPrevious();
                 if (e.key === 'ArrowRight') showNext();
-                if (e.key === 'Escape') {
-                    lightbox.style.display = 'none';
-                    lightboxVideo.src = '';
-                    lightboxImage.src = '';
-                }
+                if (e.key === 'Escape') closeLightbox();
             }
         });
 
-        // Lightbox bezárása
-        lightboxClose.addEventListener('click', () => {
-            lightbox.style.display = 'none';
-            lightboxVideo.src = '';
-            lightboxImage.src = '';
-        });
-
+        lightboxClose.addEventListener('click', closeLightbox);
         prevBtn.addEventListener('click', showPrevious);
         nextBtn.addEventListener('click', showNext);
 
         lightbox.addEventListener('click', (e) => {
-            if (e.target === lightbox) {
-                lightbox.style.display = 'none';
-                lightboxVideo.src = '';
-                lightboxImage.src = '';
-            }
+            if (e.target === lightbox) closeLightbox();
         });
 
         lightbox.addEventListener('touchstart', (e) => {
             touchStartX = e.changedTouches[0].clientX;
-        });
+        }, { passive: true });
 
-        lightbox.addEventListener('touchend', handleSwipe);
+        lightbox.addEventListener('touchend', (e) => {
+            const diff = touchStartX - e.changedTouches[0].clientX;
+            if (Math.abs(diff) > 50) {
+                diff > 0 ? showNext() : showPrevious();
+            }
+        }, { passive: true });
 
-        // Galéria betöltésének indítása
         loadGallery();
     </script>
 </body>

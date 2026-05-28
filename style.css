@@ -1,4 +1,3 @@
-/* Alapvető stílusok */
 * {
     margin: 0;
     padding: 0;
@@ -15,19 +14,18 @@
 
 html, body {
     width: 100%;
-    height: 100%;
     font-family: 'Montserrat', sans-serif;
     background-color: var(--bg-light);
     color: var(--text-dark);
 }
 
-/* Layout */
+/* ── LANDING PAGE ── */
 body {
     display: flex;
     justify-content: center;
-    align-items: flex-start;
-    padding: 20px;
-    min-height: 100vh;
+    align-items: center;
+    min-height: 100dvh;   /* dvh: telefonon a cím/navbar-t is figyelembe veszi */
+    padding: 0;
 }
 
 .main-container {
@@ -36,9 +34,9 @@ body {
     display: flex;
     justify-content: center;
     align-items: center;
-    min-height: 100vh;
 }
 
+/* ── ALOLDALAK (gallery, upload, admin) ── */
 .page-container {
     width: 100%;
     max-width: 480px;
@@ -46,7 +44,7 @@ body {
     border-radius: 12px;
     box-shadow: 0 2px 16px rgba(201, 168, 76, 0.10);
     padding: 30px;
-    margin-top: 20px;
+    margin: 20px auto;
 }
 
 .content {
@@ -67,10 +65,11 @@ body {
     color: var(--text-dark);
 }
 
-/* Főoldal stílusok */
+/* ── FŐOLDAL ── */
 .hero-section {
     text-align: center;
-    padding: 60px 20px;
+    padding: 40px 24px;
+    width: 100%;
 }
 
 .hero-title {
@@ -103,7 +102,7 @@ body {
     margin-top: 40px;
 }
 
-/* Gomb stílusok */
+/* ── GOMBOK ── */
 .button {
     display: inline-block;
     padding: 15px 40px;
@@ -145,7 +144,7 @@ body {
     box-shadow: 0 4px 12px rgba(211, 47, 47, 0.25);
 }
 
-/* Címek */
+/* ── CÍMEK ── */
 h1 {
     font-family: 'Cormorant Garamond', serif;
     font-size: 48px;
@@ -155,7 +154,7 @@ h1 {
     text-align: center;
 }
 
-/* Upload zóna */
+/* ── UPLOAD ── */
 .upload-zone {
     border: 3px dashed var(--border-color);
     border-radius: 12px;
@@ -189,7 +188,7 @@ h1 {
     color: #999;
 }
 
-/* Progress bar */
+/* ── PROGRESS ── */
 .progress-container {
     margin: 20px 0;
 }
@@ -215,7 +214,7 @@ h1 {
     transition: width 0.3s ease;
 }
 
-/* Üzenetek */
+/* ── ÜZENETEK ── */
 .message {
     padding: 15px;
     border-radius: 12px;
@@ -236,7 +235,7 @@ h1 {
     border: 1px solid #FFCDD2;
 }
 
-/* Loading spinner */
+/* ── LOADING SPINNER ── */
 .loading-spinner {
     display: flex;
     flex-direction: column;
@@ -266,7 +265,7 @@ h1 {
     font-size: 14px;
 }
 
-/* Galéria grid */
+/* ── GALÉRIA GRID ── */
 .gallery-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
@@ -290,7 +289,7 @@ h1 {
     box-shadow: 0 4px 12px rgba(201, 168, 76, 0.2);
 }
 
-/* Lightbox */
+/* ── LIGHTBOX ── */
 .lightbox {
     display: flex;
     position: fixed;
@@ -308,8 +307,6 @@ h1 {
     position: relative;
     max-width: 90%;
     max-height: 90%;
-    width: auto;
-    height: auto;
 }
 
 .lightbox-content img,
@@ -317,40 +314,40 @@ h1 {
     max-width: 100%;
     max-height: 85vh;
     border-radius: 8px;
+    display: block;
 }
 
 .lightbox-close {
     position: absolute;
-    top: -40px;
-    right: 10px;
+    top: -50px;
+    right: 0;
     color: white;
     font-size: 32px;
     cursor: pointer;
-    transition: transform 0.3s ease;
-    width: 50px;
-    height: 50px;
-    background: rgba(201, 168, 76, 0.8);
+    width: 44px;
+    height: 44px;
+    background: rgba(201, 168, 76, 0.85);
     border: none;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     font-weight: bold;
+    transition: background 0.2s ease;
+    -webkit-tap-highlight-color: transparent;
 }
 
 .lightbox-close:hover {
     background: rgba(201, 168, 76, 1);
-    transform: scale(1.15);
 }
 
-/* Lightbox letöltés gomb */
 .lightbox-download {
     position: absolute;
-    top: -40px;
-    right: 75px;
-    width: 50px;
-    height: 50px;
-    background: rgba(201, 168, 76, 0.8);
+    top: -50px;
+    right: 54px;
+    width: 44px;
+    height: 44px;
+    background: rgba(201, 168, 76, 0.85);
     border: none;
     border-radius: 50%;
     cursor: pointer;
@@ -359,103 +356,50 @@ h1 {
     justify-content: center;
     font-size: 20px;
     text-decoration: none;
-    transition: all 0.3s ease;
+    transition: background 0.2s ease;
     z-index: 1001;
+    -webkit-tap-highlight-color: transparent;
 }
 
 .lightbox-download:hover {
     background: rgba(201, 168, 76, 1);
-    transform: scale(1.1);
 }
 
-@media (max-width: 768px) {
-    .lightbox-close {
-        top: 15px;
-        right: 15px;
-        width: 45px;
-        height: 45px;
-        font-size: 28px;
-    }
-    
-    .lightbox-download {
-        top: 15px;
-        right: 70px;
-        width: 45px;
-        height: 45px;
-        font-size: 18px;
-    }
-}
-
-/* Lightbox navigációs gombok */
 .lightbox-nav {
     position: absolute;
     top: 50%;
     transform: translateY(-50%);
-    background: rgba(201, 168, 76, 0.8);
+    background: rgba(201, 168, 76, 0.85);
     color: white;
     border: none;
-    width: 50px;
-    height: 50px;
+    width: 48px;
+    height: 48px;
     font-size: 24px;
     cursor: pointer;
     border-radius: 50%;
-    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s ease;
     z-index: 1001;
+    -webkit-tap-highlight-color: transparent;
 }
 
 .lightbox-nav:hover {
     background: rgba(201, 168, 76, 1);
-    transform: translateY(-50%) scale(1.1);
 }
 
-.lightbox-prev {
-    left: 20px;
-}
+.lightbox-prev { left: -60px; }
+.lightbox-next { right: -60px; }
 
-.lightbox-next {
-    right: 20px;
-}
-
-@media (max-width: 768px) {
-    .lightbox-nav {
-        width: 40px;
-        height: 40px;
-        font-size: 18px;
-    }
-    
-    .lightbox-prev {
-        left: 10px;
-    }
-    
-    .lightbox-next {
-        right: 10px;
-    }
-    
-    .lightbox-close {
-        top: 15px;
-        right: 15px;
-        width: 45px;
-        height: 45px;
-        font-size: 28px;
-    }
-    
-    .lightbox-download {
-        top: 15px;
-        right: 70px;
-        width: 45px;
-        height: 45px;
-        font-size: 18px;
-    }
-}
-
-/* Üres galéria üzenet */
+/* ── ÜRES ÜZENET ── */
 .empty-message {
     text-align: center;
     padding: 50px 20px;
     color: #999;
 }
 
-/* Admin oldal */
+/* ── ADMIN ── */
 .auth-panel,
 .admin-panel {
     display: flex;
@@ -495,7 +439,7 @@ h1 {
     margin-bottom: 25px;
 }
 
-/* Fájlok listája */
+/* ── FÁJL LISTA ── */
 .files-list {
     display: flex;
     flex-direction: column;
@@ -537,41 +481,57 @@ h1 {
     flex-wrap: wrap;
 }
 
-/* Responsivitás */
+/* ── RESZPONZIVITÁS ── */
 @media (max-width: 480px) {
     .page-container {
         padding: 20px;
-        margin-top: 10px;
+        margin: 12px;
+        border-radius: 10px;
     }
-    
+
     .hero-title {
         font-size: 56px;
     }
-    
+
     .hero-section {
-        padding: 40px 20px;
+        padding: 32px 20px;
     }
-    
+
     h1 {
         font-size: 36px;
     }
-    
+
     .file-item {
         grid-template-columns: 80px 1fr;
     }
-    
+
     .file-preview {
         width: 80px;
         height: 80px;
     }
-    
+
     .button-small {
         flex: 1;
         min-width: 80px;
     }
-    
+
     .file-actions {
         justify-content: space-between;
+    }
+
+    /* Lightbox gombok telefonon belülre kerülnek */
+    .lightbox-close {
+        top: 12px;
+        right: 12px;
+    }
+
+    .lightbox-download {
+        top: 12px;
+        right: 66px;
+    }
+
+    .lightbox-nav {
+        display: none !important;
     }
 }
 
@@ -579,13 +539,12 @@ h1 {
     .hero-title {
         font-size: 48px;
     }
-    
+
     .page-container {
         padding: 15px;
     }
-    
+
     .gallery-grid {
-        grid-template-columns: repeat(2, 1fr);
         gap: 8px;
     }
 }
