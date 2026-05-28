@@ -62,7 +62,7 @@
 
         // R2 URL генератор
         function getR2Url(fileName) {
-            return `https://eskuvo-upload.r2.cloudflarestorage.com/${fileName}`;
+            return `${CONFIG.WORKER_URL}/download/${encodeURIComponent(fileName)}`;
         }
 
         // Fájl típus meghatározása

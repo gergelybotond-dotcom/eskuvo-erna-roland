@@ -466,6 +466,36 @@ export default {
       return handleListFiles(r2Bucket);
     }
 
+    // GET /download/:fileName - Fájl letöltése R2-ből
+    const downloadMatch = pathname.match(/^\/download\/(.+)$/);
+    if (request.method === 'GET' && downloadMatch) {
+      const fileName = decodeURIComponent(downloadMatch[1]);
+      try {
+        const object = await r2Bucket.get(fileName);
+        if (!object) {
+          return new Response(
+            JSON.stringify({ error: 'File not found' }),
+            { status: 404, headers: getCorsHeaders() }
+          );
+        }
+        return new Response(object.body, {
+          status: 200,
+          headers: {
+            'Content-Type': object.httpMetadata?.contentType || 'application/octet-stream',
+            'Content-Length': object.size,
+            'Cache-Control': 'public, max-age=31536000',
+            ...getCorsHeaders()
+          }
+        });
+      } catch (error) {
+        console.error('Download error:', error);
+        return new Response(
+          JSON.stringify({ error: 'Download failed' }),
+          { status: 500, headers: getCorsHeaders() }
+        );
+      }
+    }
+
     // DELETE /file/:id - R2-ből törlés
     const deleteMatch = pathname.match(/^\/file\/(.+)$/);
     if (request.method === 'DELETE' && deleteMatch) {
