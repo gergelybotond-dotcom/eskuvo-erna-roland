@@ -1,14 +1,11 @@
 name: Deploy to GitHub Pages
-
 on:
   push:
     branches: [ main ]
-
 permissions:
   contents: read
   pages: write
   id-token: write
-
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
@@ -17,11 +14,9 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     
     steps:
-    # Kód checkout
     - name: Checkout code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
     
-    # SHA-256 hash létrehozása az admin jelszóból
     - name: Generate admin password hash
       env:
         ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
@@ -29,7 +24,6 @@ jobs:
         ADMIN_HASH=$(echo -n "$ADMIN_PASSWORD" | sha256sum | cut -d' ' -f1)
         echo "ADMIN_HASH=$ADMIN_HASH" >> $GITHUB_ENV
     
-    # config.js fájl frissítése
     - name: Update config.js
       env:
         DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
@@ -38,13 +32,11 @@ jobs:
         sed -i "s/DRIVE_FOLDER_ID_PLACEHOLDER/$DRIVE_FOLDER_ID/g" config.js
         sed -i "s/ADMIN_HASH_PLACEHOLDER/$ADMIN_HASH/g" config.js
     
-    # GitHub Pages upload
     - name: Upload to GitHub Pages
       uses: actions/upload-pages-artifact@v3
       with:
         path: '.'
     
-    # GitHub Pages deployment
     - name: Deploy to GitHub Pages
       id: deployment
-      uses: actions/deploy-pages@v1
+      uses: actions/deploy-pages@v4
