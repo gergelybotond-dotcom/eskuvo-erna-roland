@@ -40,7 +40,7 @@ jobs:
     
     # GitHub Pages upload
     - name: Upload to GitHub Pages
-      uses: actions/upload-pages-artifact@v2
+      uses: actions/upload-pages-artifact@v3
       with:
         path: '.'
     
