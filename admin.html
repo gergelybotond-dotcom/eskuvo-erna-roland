@@ -119,18 +119,53 @@
             }
         }
 
+        // R2 URL генератор
+        function getR2Url(fileName) {
+            return `https://eskuvo-upload.r2.cloudflarestorage.com/${fileName}`;
+        }
+
+        // Fájl típus meghatározása
+        function getFileType(fileName) {
+            const ext = fileName.split('.').pop().toLowerCase();
+            if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) return 'image';
+            if (['mp4', 'webm', 'mov', 'avi'].includes(ext)) return 'video';
+            return 'unknown';
+        }
+
         // Fájl elem létrehozása
         function createFileItem(file) {
             const item = document.createElement('div');
             item.className = 'file-item';
             
-            const isImage = file.mimeType.startsWith('image/');
+            const fileType = getFileType(file.name);
+            const fileUrl = getR2Url(file.name);
+            const isImage = fileType === 'image';
             
-            // Előnézet
-            const preview = document.createElement('img');
-            preview.src = file.thumbnailLink || file.webContentLink;
-            preview.alt = file.name;
-            preview.className = 'file-preview';
+            // Előnézet (kép vagy videó)
+            let preview;
+            if (isImage) {
+                preview = document.createElement('img');
+                preview.src = fileUrl;
+                preview.alt = file.name;
+                preview.className = 'file-preview';
+                preview.style.cursor = 'pointer';
+                preview.addEventListener('click', () => openImagePreview(fileUrl, file.name));
+            } else if (fileType === 'video') {
+                preview = document.createElement('video');
+                preview.src = fileUrl;
+                preview.className = 'file-preview';
+                preview.style.cursor = 'pointer';
+                preview.addEventListener('click', () => openVideoPreview(fileUrl, file.name));
+            } else {
+                preview = document.createElement('div');
+                preview.className = 'file-preview';
+                preview.textContent = '📄';
+                preview.style.display = 'flex';
+                preview.style.alignItems = 'center';
+                preview.style.justifyContent = 'center';
+                preview.style.fontSize = '2rem';
+                preview.style.backgroundColor = '#f0f0f0';
+            }
             
             // Fájl info
             const info = document.createElement('div');
@@ -141,13 +176,19 @@
             nameEl.textContent = file.name;
             info.appendChild(nameEl);
             
+            const sizeEl = document.createElement('p');
+            sizeEl.style.fontSize = '0.85rem';
+            sizeEl.style.color = '#999';
+            sizeEl.textContent = (file.size / 1024 / 1024).toFixed(2) + ' MB';
+            info.appendChild(sizeEl);
+            
             // Gombok
             const buttonsContainer = document.createElement('div');
             buttonsContainer.className = 'file-actions';
             
             // Letöltés gomb
             const downloadBtn = document.createElement('a');
-            downloadBtn.href = file.webContentLink;
+            downloadBtn.href = fileUrl;
             downloadBtn.className = 'button button-small';
             downloadBtn.textContent = '⬇️ Letöltés';
             downloadBtn.download = file.name;
@@ -157,7 +198,7 @@
             const deleteBtn = document.createElement('button');
             deleteBtn.className = 'button button-small button-danger';
             deleteBtn.textContent = '🗑️ Törlés';
-            deleteBtn.addEventListener('click', () => deleteFile(file.id, item));
+            deleteBtn.addEventListener('click', () => deleteFile(file.name, item));
             buttonsContainer.appendChild(deleteBtn);
             
             info.appendChild(buttonsContainer);
@@ -168,14 +209,46 @@
             return item;
         }
 
+        // Image preview modal
+        function openImagePreview(fileUrl, fileName) {
+            const modal = document.createElement('div');
+            modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.9);display:flex;align-items:center;justify-content:center;z-index:1000;';
+            modal.innerHTML = `
+                <div style="position:relative;max-width:90vw;max-height:90vh;">
+                    <img src="${fileUrl}" alt="${fileName}" style="max-width:100%;max-height:100%;border-radius:12px;">
+                    <button onclick="this.parentElement.parentElement.remove()" style="position:absolute;top:10px;right:10px;background:#C9A84C;border:none;color:white;width:40px;height:40px;border-radius:50%;cursor:pointer;font-size:24px;">&times;</button>
+                </div>
+            `;
+            document.body.appendChild(modal);
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) modal.remove();
+            });
+        }
+
+        // Video preview modal
+        function openVideoPreview(fileUrl, fileName) {
+            const modal = document.createElement('div');
+            modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.9);display:flex;align-items:center;justify-content:center;z-index:1000;';
+            modal.innerHTML = `
+                <div style="position:relative;max-width:90vw;max-height:90vh;">
+                    <video src="${fileUrl}" style="max-width:100%;max-height:100%;border-radius:12px;" controls autoplay></video>
+                    <button onclick="this.parentElement.parentElement.remove()" style="position:absolute;top:10px;right:10px;background:#C9A84C;border:none;color:white;width:40px;height:40px;border-radius:50%;cursor:pointer;font-size:24px;">&times;</button>
+                </div>
+            `;
+            document.body.appendChild(modal);
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) modal.remove();
+            });
+        }
+
         // Fájl törlése
-        async function deleteFile(fileId, element) {
+        async function deleteFile(fileName, element) {
             if (!confirm('Biztos, hogy törlöd ezt a fájlt?')) {
                 return;
             }
             
             try {
-                const response = await fetch(`${CONFIG.WORKER_URL}/file/${fileId}`, {
+                const response = await fetch(`${CONFIG.WORKER_URL}/file/${fileName}`, {
                     method: 'DELETE',
                     headers: {
                         'Authorization': `Bearer ${CONFIG.ADMIN_PASSWORD_HASH}`
