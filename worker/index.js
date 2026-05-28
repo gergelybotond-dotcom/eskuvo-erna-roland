@@ -75,18 +75,31 @@ async function generateJWT(serviceAccountEmail, privateKey) {
  * Google OAuth token lekérése
  */
 async function getGoogleAccessToken(serviceAccountKey) {
+  if (!serviceAccountKey || !serviceAccountKey.private_key) {
+    throw new Error('Service account key missing or invalid');
+  }
+
   const privateKeyPEM = serviceAccountKey.private_key;
   
-  // PEM formátum átalakítása
-  const binaryString = atob(privateKeyPEM.replace(/-----BEGIN PRIVATE KEY-----/, '').replace(/-----END PRIVATE KEY-----/, '').replace(/\n/g, ''));
+  // Privát kulcs átalakítása - a JSON-ban \n van, azokat valódi newline-re kell cserélni
+  const privateKeyProcessed = privateKeyPEM
+    .replace(/\\n/g, '\n')
+    .replace(/-----BEGIN PRIVATE KEY-----\n/, '')
+    .replace(/\n-----END PRIVATE KEY-----/, '')
+    .trim();
+
+  // Base64 string dekódolása Uint8Array-vá
+  const binaryString = atob(privateKeyProcessed);
   const bytes = new Uint8Array(binaryString.length);
   for (let i = 0; i < binaryString.length; i++) {
     bytes[i] = binaryString.charCodeAt(i);
   }
 
+  // JWT token generálása
   const jwt = await generateJWT(serviceAccountKey.client_email, bytes.buffer);
 
-  const response = await fetch('https://oauth2.googleapis.com/token', {
+  // Google OAuth token kérése
+  const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
@@ -95,7 +108,17 @@ async function getGoogleAccessToken(serviceAccountKey) {
     })
   });
 
-  const data = await response.json();
+  if (!tokenResponse.ok) {
+    const errorData = await tokenResponse.text();
+    throw new Error(`Failed to get access token: ${errorData}`);
+  }
+
+  const data = await tokenResponse.json();
+  
+  if (!data.access_token) {
+    throw new Error('No access token in response');
+  }
+
   return data.access_token;
 }
 
@@ -103,51 +126,91 @@ async function getGoogleAccessToken(serviceAccountKey) {
  * Fájl feltöltése Google Drive-ra
  */
 async function uploadToGoogleDrive(file, fileName, accessToken, folderId) {
+  if (!file || !fileName || !accessToken || !folderId) {
+    throw new Error('Missing required parameters for upload');
+  }
+
+  // Multipart form-data assembly
   const metadata = {
     name: fileName,
     parents: [folderId]
   };
 
-  // Multipart form-data készítés
+  // FormData konstruálása
   const formData = new FormData();
-  formData.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-  formData.append('file', file);
+  formData.append(
+    'metadata',
+    new Blob([JSON.stringify(metadata)], { type: 'application/json' })
+  );
+  formData.append('file', file, fileName);
 
-  const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${accessToken}`
-    },
-    body: formData
-  });
+  // Google Drive API upload
+  const uploadResponse = await fetch(
+    'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`
+      },
+      body: formData
+    }
+  );
 
-  if (!response.ok) {
-    throw new Error(`Upload failed: ${response.statusText}`);
+  if (!uploadResponse.ok) {
+    const errorText = await uploadResponse.text();
+    throw new Error(`Google Drive upload failed: ${uploadResponse.status} - ${errorText}`);
   }
 
-  const data = await response.json();
-  return data;
+  const uploadedFile = await uploadResponse.json();
+  
+  if (!uploadedFile.id) {
+    throw new Error('Upload successful but no file ID returned');
+  }
+
+  return uploadedFile;
 }
 
 /**
  * Fájlok listázása a Google Drive mappáról
  */
 async function listGoogleDriveFiles(accessToken, folderId) {
-  const query = `'${folderId}' in parents and trashed=false`;
-  const url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=id,name,mimeType,thumbnailLink,webContentLink&pageSize=1000`;
+  if (!accessToken || !folderId) {
+    throw new Error('Missing access token or folder ID');
+  }
 
-  const response = await fetch(url, {
+  // Query összeállítása - csak nem törölt fájlok a mappában
+  const query = `'${folderId}' in parents and trashed=false`;
+  const fieldsToFetch = 'id,name,mimeType,thumbnailLink,webContentLink';
+  
+  const listUrl = new URL('https://www.googleapis.com/drive/v3/files');
+  listUrl.searchParams.append('q', query);
+  listUrl.searchParams.append('fields', `files(${fieldsToFetch})`);
+  listUrl.searchParams.append('pageSize', '1000');
+
+  console.log(`Listing files from folder: ${folderId}`);
+
+  const listResponse = await fetch(listUrl.toString(), {
+    method: 'GET',
     headers: {
-      'Authorization': `Bearer ${accessToken}`
+      'Authorization': `Bearer ${accessToken}`,
+      'Accept': 'application/json'
     }
   });
 
-  if (!response.ok) {
-    throw new Error(`List failed: ${response.statusText}`);
+  if (!listResponse.ok) {
+    const errorText = await listResponse.text();
+    throw new Error(`List failed (${listResponse.status}): ${errorText}`);
   }
 
-  const data = await response.json();
-  return data.files || [];
+  const data = await listResponse.json();
+  
+  if (!data.files) {
+    console.warn('No files field in response');
+    return [];
+  }
+
+  console.log(`Found ${data.files.length} files`);
+  return data.files;
 }
 
 /**
@@ -172,55 +235,98 @@ async function deleteFromGoogleDrive(fileId, accessToken) {
  * POST /upload - Fájl feltöltése
  */
 async function handleUpload(request, serviceAccountKey, folderId) {
-  const contentType = request.headers.get('content-type');
-  
-  if (!contentType || !contentType.includes('multipart/form-data')) {
-    return new Response(JSON.stringify({ error: 'Invalid content type' }), {
-      status: 400,
-      headers: getCorsHeaders()
-    });
-  }
-
   try {
-    const formData = await request.formData();
+    // FormData feldolgozása
+    let formData;
+    try {
+      formData = await request.formData();
+    } catch (error) {
+      console.error('FormData parsing error:', error);
+      return new Response(
+        JSON.stringify({ error: 'Invalid form data', details: error.message }),
+        {
+          status: 400,
+          headers: getCorsHeaders()
+        }
+      );
+    }
+
     const file = formData.get('file');
 
     if (!file) {
-      return new Response(JSON.stringify({ error: 'No file provided' }), {
-        status: 400,
-        headers: getCorsHeaders()
-      });
+      return new Response(
+        JSON.stringify({ error: 'No file provided' }),
+        {
+          status: 400,
+          headers: getCorsHeaders()
+        }
+      );
     }
 
     // Fájl típus validáció
     const validMimeTypes = ['image/jpeg', 'image/png', 'video/mp4'];
     if (!validMimeTypes.includes(file.type)) {
-      return new Response(JSON.stringify({ error: 'Invalid file type' }), {
-        status: 400,
-        headers: getCorsHeaders()
-      });
+      return new Response(
+        JSON.stringify({ 
+          error: 'Invalid file type',
+          received: file.type,
+          allowed: validMimeTypes
+        }),
+        {
+          status: 400,
+          headers: getCorsHeaders()
+        }
+      );
     }
 
-    // Google token szerzése
-    const accessToken = await getGoogleAccessToken(serviceAccountKey);
+    console.log(`Uploading file: ${file.name} (${file.type}, ${file.size} bytes)`);
 
-    // Feltöltés
+    // Google Access Token szerzése
+    let accessToken;
+    try {
+      accessToken = await getGoogleAccessToken(serviceAccountKey);
+    } catch (error) {
+      console.error('Token generation error:', error);
+      return new Response(
+        JSON.stringify({ 
+          error: 'Failed to authenticate with Google',
+          details: error.message
+        }),
+        {
+          status: 500,
+          headers: getCorsHeaders()
+        }
+      );
+    }
+
+    // Feltöltés Google Drive-ra
     const result = await uploadToGoogleDrive(file, file.name, accessToken, folderId);
 
-    return new Response(JSON.stringify({
-      success: true,
-      fileId: result.id,
-      fileName: result.name
-    }), {
-      status: 200,
-      headers: getCorsHeaders()
-    });
+    console.log(`File uploaded successfully: ${result.id}`);
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        fileId: result.id,
+        fileName: result.name
+      }),
+      {
+        status: 200,
+        headers: getCorsHeaders()
+      }
+    );
   } catch (error) {
-    console.error('Upload error:', error);
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: getCorsHeaders()
-    });
+    console.error('Upload handler error:', error);
+    return new Response(
+      JSON.stringify({ 
+        error: 'Upload failed',
+        details: error.message
+      }),
+      {
+        status: 500,
+        headers: getCorsHeaders()
+      }
+    );
   }
 }
 
@@ -289,51 +395,89 @@ async function handleDeleteFile(request, fileId, serviceAccountKey, adminToken) 
  */
 export default {
   async fetch(request, env, ctx) {
-    // CORS preflight
+    // CORS preflight kezelés
     if (request.method === 'OPTIONS') {
       return handleOptions();
     }
-
-    // Service Account kulcs betöltése
-    let serviceAccountKey;
-    try {
-      serviceAccountKey = JSON.parse(env.CF_SERVICE_KEY);
-    } catch (error) {
-      console.error('Failed to parse service key:', error);
-      return new Response(JSON.stringify({ error: 'Server configuration error' }), {
-        status: 500,
-        headers: getCorsHeaders()
-      });
-    }
-
-    const folderId = env.DRIVE_FOLDER_ID || 'root';
-    const adminToken = env.ADMIN_TOKEN;
 
     // URL feldolgozása
     const url = new URL(request.url);
     const pathname = url.pathname;
 
-    // POST /upload
+    console.log(`${request.method} ${pathname}`);
+
+    // Service Account kulcs betöltése az environment-ből
+    let serviceAccountKey;
+    try {
+      const serviceKeyStr = env.CF_SERVICE_KEY;
+      
+      if (!serviceKeyStr) {
+        console.error('CF_SERVICE_KEY environment variable not set');
+        return new Response(
+          JSON.stringify({ 
+            error: 'Server configuration error',
+            details: 'Service key not configured'
+          }),
+          {
+            status: 500,
+            headers: getCorsHeaders()
+          }
+        );
+      }
+
+      // Ha JSON string-ként van tárolva, parse-oljuk
+      serviceAccountKey = typeof serviceKeyStr === 'string' 
+        ? JSON.parse(serviceKeyStr) 
+        : serviceKeyStr;
+
+    } catch (error) {
+      console.error('Failed to parse service key:', error);
+      return new Response(
+        JSON.stringify({ 
+          error: 'Server configuration error',
+          details: 'Invalid service key format'
+        }),
+        {
+          status: 500,
+          headers: getCorsHeaders()
+        }
+      );
+    }
+
+    // Environment variables értékei
+    const folderId = env.DRIVE_FOLDER_ID || 'root';
+    const adminToken = env.ADMIN_TOKEN;
+
+    console.log(`Using folder: ${folderId}`);
+
+    // POST /upload - Fájl feltöltése
     if (request.method === 'POST' && pathname === '/upload') {
       return handleUpload(request, serviceAccountKey, folderId);
     }
 
-    // GET /files
+    // GET /files - Fájlok listázása
     if (request.method === 'GET' && pathname === '/files') {
       return handleListFiles(serviceAccountKey, folderId);
     }
 
-    // DELETE /file/:id
+    // DELETE /file/:id - Fájl törlése
     const deleteMatch = pathname.match(/^\/file\/(.+)$/);
     if (request.method === 'DELETE' && deleteMatch) {
-      const fileId = deleteMatch[1];
+      const fileId = decodeURIComponent(deleteMatch[1]);
       return handleDeleteFile(request, fileId, serviceAccountKey, adminToken);
     }
 
-    // 404 Not Found
-    return new Response(JSON.stringify({ error: 'Not found' }), {
-      status: 404,
-      headers: getCorsHeaders()
-    });
+    // 404 - Ismeretlen végpont
+    return new Response(
+      JSON.stringify({ 
+        error: 'Not found',
+        path: pathname,
+        method: request.method
+      }),
+      {
+        status: 404,
+        headers: getCorsHeaders()
+      }
+    );
   }
 };
